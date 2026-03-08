@@ -5,6 +5,7 @@ from torch import Tensor
 from therapml import tensor
 from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
+from therapml.phase2.part1 import activations
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -26,15 +27,19 @@ def get_adam_cls() -> Any:
 
 
 def run_relu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    relu = activations.ReLU()
+    return relu(in_features)
 
 
 def run_gelu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    gelu = activations.GELU()
+    return gelu(in_features)
 
 
 def run_softmax(in_features: Float[Tensor, "..."], dim: int) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    softmax = activations.Softmax()
+    return softmax(x=in_features, dim=dim)
 
 
 def run_linear(
@@ -60,7 +65,15 @@ def run_swiglu(
     w3_weight: Float[Tensor, " d_ff d_model"],
     in_features: Float[Tensor, " ... d_model"],
 ) -> Float[Tensor, " ... d_model"]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    swiglu = activations.SwiGLU(
+        d_model=d_model,
+        d_ff=d_ff,
+        w1_weight=w1_weight,
+        w2_weight=w2_weight,
+        w3_weight=w3_weight,
+    )
+    return swiglu(in_features)
 
 
 def run_cross_entropy_loss(
