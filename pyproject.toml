@@ -7,7 +7,9 @@ requires-python = ">=3.11"
 dependencies = [
     "einops>=0.8.2",
     "jaxtyping>=0.3.7",
+    "matplotlib>=3.10.8",
     "numpy>=2.4.2",
+    "pandas>=3.0.1",
     "pytest>=9.0.2",
     "torch>=2.10.0",
     "tqdm>=4.67.3",

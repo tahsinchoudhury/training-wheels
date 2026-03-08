@@ -2,19 +2,24 @@ from typing import Any
 from jaxtyping import Float, Int, Bool
 
 from torch import Tensor
+from therapml import tensor
+from therapml import sgd
+from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    return tensor.MatrixOps.tensor_multiply(arr1, arr2)
 
 
 def run_tensor_dot(arr1: Float[list, "..."], arr2: Float[list, "..."], dim: int):
-    raise NotImplementedError
+    # raise NotImplementedError
+    return tensor.MatrixOps.tensor_dot(arr1, arr2, dim)
 
 
 def get_sgd_cls() -> Any:
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    return sgd.SGD
 
 def get_adam_cls() -> Any:
     raise NotImplementedError
@@ -38,7 +43,13 @@ def run_linear(
     weights: Float[Tensor, "d_out d_in"],
     in_features: Float[Tensor, "... d_in"],
 ) -> Float[Tensor, "... d_out"]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    linear_layer = LinearLayerKaimingHe(
+        input_features=d_in,
+        output_features=d_out,
+        weights=weights
+    )
+    return linear_layer(in_features)
 
 
 def run_swiglu(

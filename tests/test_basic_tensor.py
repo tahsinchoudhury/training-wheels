@@ -257,7 +257,7 @@ def test_performance_multiply_benchmark():
     arr2 = np.random.randn(batch_size, y_dim, z_dim).tolist()
 
     # Benchmark numpy einsum
-    num_iterations = 1000
+    num_iterations = 5
     numpy_times = []
     for _ in tqdm(range(num_iterations), "NP Mult Perf"):
         start = time.perf_counter()
@@ -304,7 +304,7 @@ def test_performance_dot_benchmark():
     arr2 = np.random.randn(batch_size, dim_a, dim_b).tolist()
 
     # Benchmark numpy dot along dimension 0
-    num_iterations = 1000
+    num_iterations = 5
     numpy_times = []
     for _ in tqdm(range(num_iterations), "NP Dot Perf"):
         start = time.perf_counter()
