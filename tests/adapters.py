@@ -5,7 +5,7 @@ from torch import Tensor
 from therapml import tensor
 from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
-from therapml.phase2.part1 import activations
+from therapml.phase2.part1 import activations, loss, optimizers
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -23,8 +23,7 @@ def get_sgd_cls() -> Any:
     return sgd.SGD
 
 def get_adam_cls() -> Any:
-    raise NotImplementedError
-
+    return optimizers.AdamW
 
 def run_relu(in_features: Float[Tensor, "..."]) -> Float[Tensor, "..."]:
     # raise NotImplementedError
@@ -79,7 +78,9 @@ def run_swiglu(
 def run_cross_entropy_loss(
     logits: Float[Tensor, "batch output_dim"], ground_truth: Float[Tensor, "batch output_dim"]
 ) -> Float[Tensor, ""]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    loss_fn = loss.CrossEntropyLoss()
+    return loss_fn(logits, ground_truth)
 
 
 def run_dropout(input: Float[Tensor, "..."], prob: float) -> Float[Tensor, "..."]:

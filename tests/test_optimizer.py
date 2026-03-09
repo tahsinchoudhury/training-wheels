@@ -32,7 +32,7 @@ def test_sgd():
 
     assert torch.allclose(actual_weights, pytorch_weights, atol=1e-4)
 
-@pytest.mark.skip(reason="Not implemented yet")
+# @pytest.mark.skip(reason="Not implemented yet")
 def test_adam():
     cfg = dict(
         lr=1e-3,
