@@ -5,7 +5,7 @@ from torch import Tensor
 from therapml import tensor
 from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
-from therapml.phase2.part1 import activations, loss, optimizers
+from therapml.phase2.part1 import activations, loss, optimizers, dropout, normalization
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -84,17 +84,30 @@ def run_cross_entropy_loss(
 
 
 def run_dropout(input: Float[Tensor, "..."], prob: float) -> Float[Tensor, "..."]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    dropout_layer = dropout.Dropout(prob)
+    return dropout_layer(input)
 
 
 def run_layernorm(
     input: Float[Tensor, "batch ..."], gamma: Float[Tensor, "batch ..."], beta: Float[Tensor, "batch ..."]
 ) -> Float[Tensor, "batch ..."]:
-    raise NotImplementedError
+    hidden_dim = input.shape[-1]
+    layernorm = normalization.LayerNorm(
+        hidden_dim=hidden_dim,
+        gamma=gamma,
+        beta=beta
+    )
+    return layernorm(input)
 
 
 def run_rmsnorm(input: Float[Tensor, "batch ..."], gamma: Float[Tensor, "batch ..."]) -> Float[Tensor, "batch ..."]:
-    raise NotImplementedError
+    hidden_dim = input.shape[-1]
+    rmsnorm = normalization.RMSNorm(
+        hidden_dim=hidden_dim,
+        gamma=gamma
+    )
+    return rmsnorm(input)
 
 
 def run_rope(

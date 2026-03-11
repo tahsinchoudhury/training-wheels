@@ -33,19 +33,23 @@ class GELU(nn.Module):
 class SwiGLU(nn.Module):
     def __init__(self, d_model, d_ff, w1_weight, w2_weight, w3_weight):
         super().__init__()
+
         self.d_model = d_model
         self.d_ff = d_ff
-        self.w1_weight = w1_weight
-        self.w2_weight = w2_weight
-        self.w3_weight = w3_weight
-        self.silu = SiLU()
 
-    def forward(self, x)-> Float[torch.Tensor, " ... d_model"]:
+        self.w1_weight = nn.Parameter(w1_weight)
+        self.w2_weight = nn.Parameter(w2_weight)
+        self.w3_weight = nn.Parameter(w3_weight)
+
+        self.silu = nn.SiLU()
+
+    def forward(self, x) -> Float[torch.Tensor, "... d_model"]:
         x1 = x @ self.w1_weight.T
         x2 = x @ self.w3_weight.T
-        swiglu = x2 * self.silu(x1)
-        ret = swiglu @ self.w2_weight.T
 
+        swiglu = x2 * self.silu(x1)
+
+        ret = swiglu @ self.w2_weight.T
         return ret
     
 class Softmax(nn.Module):
