@@ -6,6 +6,7 @@ from therapml import tensor
 from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
 from therapml.phase2.part1 import activations, loss, optimizers, dropout, normalization
+from therapml.phase2.part1 import pos_embedding, attention
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -117,7 +118,13 @@ def run_rope(
     input_embeddings: Float[Tensor, "batch ctx_len embedding_dim"],
     token_positions: Int[Tensor, "batch ctx_len"],
 ) -> Float[Tensor, "batch ctx_len embedding_dim"]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    rope = pos_embedding.RoPE(
+        embedding_dim=embedding_dim,
+        theta=theta,
+        context_len=context_len,
+    )
+    return rope(input_embeddings, token_positions)
 
 
 def run_self_attention(
@@ -129,7 +136,8 @@ def run_self_attention(
     """
     Note the number of dimensions here can be greater than 3
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return attention.Attention.scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
