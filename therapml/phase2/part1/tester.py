@@ -1,19 +1,32 @@
-from . import dropout, loss
+# from . import dropout, loss
 import torch
 
-# logits = torch.tensor([
-#     [2.0, 1.0, 0.1],
-#     [0.5, 2.5, 0.3]
-# ])
+# scores = scores.masked_fill(~mask, torch.finfo(scores.dtype).min)
 
-# # 0, 1
-# targets = torch.tensor([
-#     [1, 0, 0],
-#     [0, 1, 0]
-# ])
+mask = torch.tensor([1, 1, 1, 0], dtype=torch.bool)
+mask = ~mask
+scores = torch.Tensor([2, 1, 3, 4])
+scores = scores.masked_fill(mask, -5)
+print(scores)
 
-# loss_fn = loss.CrossEntropyLoss()
-# print(loss_fn(logits, targets))
+# class Attention(nn.Module):
 
-dropout = dropout.Dropout(0.5)
-print(dropout(torch.Tensor([1.0, 2.0, 3.0, 2.0])))
+#     @staticmethod
+#     def scaled_dot_product_attention(
+#         Q: Tensor,
+#         K: Tensor,
+#         V: Tensor,
+#         mask: Tensor | None = None,
+#     ) -> Tensor:
+
+#         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(Q.shape[-1])
+
+#         if mask is not None:
+#             scores = scores.masked_fill(~mask, torch.finfo(scores.dtype).min)
+
+#         attn = torch.softmax(scores, dim=-1)
+
+#         return torch.matmul(attn, V)
+    
+#     def forward(self):
+#         pass
