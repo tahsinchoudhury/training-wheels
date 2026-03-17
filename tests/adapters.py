@@ -1,5 +1,6 @@
 from typing import Any
 from jaxtyping import Float, Int, Bool
+import torch
 
 from torch import Tensor
 from therapml import tensor
@@ -149,8 +150,19 @@ def run_multihead_self_attention(
     o_proj_weight: Float[Tensor, "d_model d_v"],
     in_features: Float[Tensor, "batch ctx_len d_in"],
 ) -> Float[Tensor, "batch ctx_len d_out"]:
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    batch, ctx_len, d_in = in_features.shape
+    mask = torch.tril(torch.ones(ctx_len, ctx_len)).bool().unsqueeze(0)
+    return attention.MultiHeadAttention.multihead_attention(
+        d_model,
+        num_heads,
+        q_proj_weight,
+        k_proj_weight,
+        v_proj_weight,
+        o_proj_weight,
+        in_features,
+        mask=mask,
+    )
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
@@ -164,7 +176,21 @@ def run_multihead_self_attention_with_rope(
     in_features: Float[Tensor, "batch ctx_len d_in"],
     token_positions: Int[Tensor, "batch ctx_len"],
 ) -> Float[Tensor, "batch ctx_len d_out"]:
-    raise NotImplementedError
+    # raise NotImplementedError
+    mask = torch.tril(torch.ones(ctx_len, ctx_len)).bool().unsqueeze(0)
+    return attention.MultiHeadAttention.multihead_attention_with_rope(
+        d_model,
+        num_heads,
+        ctx_len,
+        theta,
+        q_proj_weight,
+        k_proj_weight,
+        v_proj_weight,
+        o_proj_weight,
+        in_features,
+        token_positions,
+        mask,
+    )
 
 
 def run_transformer_block(
