@@ -33,8 +33,8 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor):
         variance = torch.square(x).mean(dim=-1, keepdim=True)
-        std = torch.sqrt(variance)
+        # std = torch.sqrt(variance)
 
-        normalized_x = x / (std + self.eps)
+        normalized_x = x * torch.rsqrt(variance + self.eps)
 
         return self.gamma * normalized_x

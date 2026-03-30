@@ -7,7 +7,8 @@ from therapml import tensor
 from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
 from therapml.phase2.part1 import activations, loss, optimizers, dropout, normalization
-from therapml.phase2.part1 import pos_embedding, attention
+from therapml.phase2.part1 import pos_embedding, attention, transformer
+from therapml.phase2.part1.models.llama import Llama
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -262,7 +263,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    batch, seq_len, _ = in_features.shape
+    mask = torch.tril(torch.ones(ctx_len, ctx_len, device=in_features.device)).bool().unsqueeze(0)
+    token_positions = torch.arange(seq_len, device=in_features.device, dtype=torch.long).unsqueeze(0).expand(batch, -1)
+
+    block = transformer.TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        ctx_len=ctx_len,
+        theta=theta,
+        weights=weights,
+    )
+    return block(in_features, token_positions=token_positions, mask=mask)
 
 
 def run_transformer_lm(
@@ -347,4 +360,18 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    config = {
+        "vocab_size": vocab_size,
+        "context_length": context_length,
+        "d_model": d_model,
+        "num_layers": num_layers,
+        "num_heads": num_heads,
+        "d_ff": d_ff,
+        "rope_theta": rope_theta,
+    }
+
+    # The provided fixture weights are not tied; keep tying disabled for correctness.
+    model = Llama(config, weights=weights, tie_weights=False)
+    model.eval()
+    with torch.no_grad():
+        return model(in_indices)
