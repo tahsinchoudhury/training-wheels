@@ -1,48 +1,51 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 
 from ..transformer import TransformerBlock
 from ..normalization import RMSNorm
 
+
+@dataclass(frozen=True, slots=True)
+class LlamaConfig:
+    vocab_size: int
+    context_length: int
+    d_model: int
+    num_layers: int
+    num_heads: int
+    d_ff: int
+    rope_theta: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "vocab_size", int(self.vocab_size))
+        object.__setattr__(self, "context_length", int(self.context_length))
+        object.__setattr__(self, "d_model", int(self.d_model))
+        object.__setattr__(self, "num_layers", int(self.num_layers))
+        object.__setattr__(self, "num_heads", int(self.num_heads))
+        object.__setattr__(self, "d_ff", int(self.d_ff))
+        object.__setattr__(self, "rope_theta", float(self.rope_theta))
+
+
 class Llama(nn.Module):
-    def __init__(self, config: dict | None = None, **kwargs):
+    def __init__(
+        self,
+        config: LlamaConfig,
+        weights: dict[str, torch.Tensor] | None = None,
+        tie_weights: bool = False,
+    ):
         super().__init__()
 
-        if config is None:
-            config = {}
-        if not isinstance(config, dict):
-            raise TypeError(f"config must be a dict or None, got {type(config).__name__}")
+        if not isinstance(config, LlamaConfig):
+            raise TypeError(f"config must be a LlamaConfig instance, got {type(config).__name__}")
 
-        cfg = dict(config)
-        cfg.update(kwargs)
-
-        vocab_size = int(cfg.pop("vocab_size"))
-        context_length = int(cfg.pop("context_length"))
-        d_model = int(cfg.pop("d_model"))
-        num_layers = int(cfg.pop("num_layers"))
-        num_heads = int(cfg.pop("num_heads"))
-        d_ff = int(cfg.pop("d_ff"))
-        rope_theta = float(cfg.pop("rope_theta"))
-
-        weights: dict[str, torch.Tensor] | None = cfg.pop("weights", None)
-        tie_weights: bool = bool(cfg.pop("tie_weights", False))
-
-        remove_rmsnorm: bool = bool(cfg.pop("remove_rmsnorm", False))
-        use_post_norm: bool = bool(cfg.pop("use_post_norm", False))
-        remove_rope: bool = bool(cfg.pop("remove_rope", False))
-        ffn_type = cfg.pop("ffn_type", None)
-
-        if cfg:
-            raise TypeError(f"Unexpected config keys: {sorted(cfg.keys())}")
-
-        if remove_rmsnorm:
-            raise ValueError("remove_rmsnorm=True is not supported by this implementation")
-        if use_post_norm:
-            raise ValueError("use_post_norm=True is not supported by this implementation")
-        if remove_rope:
-            raise ValueError("remove_rope=True is not supported by this implementation")
-        if ffn_type is not None:
-            raise ValueError(f"ffn_type={ffn_type!r} is not supported by this implementation")
+        vocab_size = config.vocab_size
+        context_length = config.context_length
+        d_model = config.d_model
+        num_layers = config.num_layers
+        num_heads = config.num_heads
+        d_ff = config.d_ff
+        rope_theta = config.rope_theta
 
         self.vocab_size = vocab_size
         self.context_length = context_length

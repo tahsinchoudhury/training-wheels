@@ -8,7 +8,7 @@ from therapml import sgd
 from therapml.phase2.part1.linear_layer import LinearLayerKaimingHe
 from therapml.phase2.part1 import activations, loss, optimizers, dropout, normalization
 from therapml.phase2.part1 import pos_embedding, attention, transformer
-from therapml.phase2.part1.models.llama import Llama
+from therapml.phase2.part1.models.llama import Llama, LlamaConfig
 
 
 def run_tensor_multiply(arr1: Float[list, "b x y"], arr2: Float[list, "b y z"]) -> Float[list, "b x z"]:
@@ -360,15 +360,15 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    config = {
-        "vocab_size": vocab_size,
-        "context_length": context_length,
-        "d_model": d_model,
-        "num_layers": num_layers,
-        "num_heads": num_heads,
-        "d_ff": d_ff,
-        "rope_theta": rope_theta,
-    }
+    config = LlamaConfig(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+    )
 
     # The provided fixture weights are not tied; keep tying disabled for correctness.
     model = Llama(config, weights=weights, tie_weights=False)

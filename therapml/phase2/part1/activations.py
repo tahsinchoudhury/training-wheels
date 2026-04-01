@@ -18,7 +18,7 @@ class ReLU(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        return torch.where(x > 0, x, torch.tensor(0))
+        return torch.where(x > 0, x, x.new_zeros(()))
     
 class GELU(nn.Module):
     def __init__(self):
