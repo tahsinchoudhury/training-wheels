@@ -39,42 +39,34 @@ class Llama(nn.Module):
         if not isinstance(config, LlamaConfig):
             raise TypeError(f"config must be a LlamaConfig instance, got {type(config).__name__}")
 
-        vocab_size = config.vocab_size
-        context_length = config.context_length
-        d_model = config.d_model
-        num_layers = config.num_layers
-        num_heads = config.num_heads
-        d_ff = config.d_ff
-        rope_theta = config.rope_theta
-
-        self.vocab_size = vocab_size
-        self.context_length = context_length
-        self.d_model = d_model
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.d_ff = d_ff
-        self.rope_theta = rope_theta
+        self.vocab_size = config.vocab_size
+        self.context_length = config.context_length
+        self.d_model = config.d_model
+        self.num_layers = config.num_layers
+        self.num_heads = config.num_heads
+        self.d_ff = config.d_ff
+        self.rope_theta = config.rope_theta
         self.tie_weights = tie_weights
 
-        self.token_embeddings = nn.Embedding(vocab_size, d_model)
+        self.token_embeddings = nn.Embedding(config.vocab_size, config.d_model)
 
         self.layers = nn.ModuleList(
             [
                 TransformerBlock(
-                    d_model=d_model,
-                    num_heads=num_heads,
-                    d_ff=d_ff,
-                    ctx_len=context_length,
-                    theta=rope_theta,
+                    d_model=config.d_model,
+                    num_heads=config.num_heads,
+                    d_ff=config.d_ff,
+                    ctx_len=config.context_length,
+                    theta=config.rope_theta,
                     weights=self._extract_layer_weights(weights, layer_idx) if weights is not None else None,
                 )
-                for layer_idx in range(num_layers)
+                for layer_idx in range(config.num_layers)
             ]
         )
 
-        self.ln_final = RMSNorm(hidden_dim=d_model, eps=1e-5)
+        self.ln_final = RMSNorm(hidden_dim=config.d_model, eps=1e-5)
 
-        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         if tie_weights:
             self._tie_embedding_and_head()
