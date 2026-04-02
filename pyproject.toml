@@ -13,6 +13,8 @@ dependencies = [
     "pytest>=9.0.2",
     "torch>=2.10.0",
     "tqdm>=4.67.3",
+    "tokenizers==0.22.2",
+    "datasets==4.8.4",
 ]
 
 [build-system]
