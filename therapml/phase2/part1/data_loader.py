@@ -8,6 +8,7 @@ from typing import Iterable, Sequence
 
 import torch
 from torch.utils.data import DataLoader, Dataset
+import logging
 
 from .tokenizer.bpe import BPETokenizer
 
@@ -104,7 +105,7 @@ def build_token_stream(
         if max_tokens is not None and len(token_ids) >= max_tokens:
             token_ids = token_ids[:max_tokens]
             break
-
+        
     return token_ids
 
 
@@ -136,6 +137,13 @@ class TokenStreamDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
             tokens = torch.tensor(list(map(int, token_ids)), dtype=dtype)
 
         self.tokens = tokens
+        
+        # Print memory usage
+        memory_bytes = self.tokens.element_size() * self.tokens.numel()
+        device_name = str(self.tokens.device)
+        memory_mb = memory_bytes / (1024 * 1024)
+        print(f"TokenStreamDataset: tokens tensor using {memory_mb:.2f} MB on device '{device_name}'")
+        
         self.seq_len = int(seq_len)
         self.stride = int(stride)
 
@@ -258,14 +266,19 @@ class TinyStoriesDataLoader:
             raise ValueError("No train_texts provided.")
 
         train_texts = list(train_texts)
+        print(f"list(train_texts) -> {len(train_texts)} items")
         eval_texts = list(eval_texts)
+        print(f"list(eval_texts) -> {len(eval_texts)} items")
         if len(eval_texts) < 2:
             eval_texts = train_texts[: max(2, min(8, len(train_texts)))]
+            print(f"len(eval_texts) < 2, reassigned to {len(eval_texts)} items")
 
         if self.cfg.max_train_texts is not None:
             train_texts = train_texts[: int(self.cfg.max_train_texts)]
+            print(f"int(self.cfg.max_train_texts) applied -> {len(train_texts)} items")
         if self.cfg.max_eval_texts is not None:
             eval_texts = eval_texts[: int(self.cfg.max_eval_texts)]
+            print(f"int(self.cfg.max_eval_texts) applied -> {len(eval_texts)} items")
 
         train_tokens = build_token_stream(
             self.tokenizer,
@@ -274,6 +287,7 @@ class TinyStoriesDataLoader:
             add_eos=self.cfg.add_eos,
             max_tokens=self.cfg.max_train_tokens,
         )
+        print(f"build_token_stream() called for train -> {len(train_tokens)} tokens")
         eval_tokens = build_token_stream(
             self.tokenizer,
             eval_texts,
@@ -281,12 +295,17 @@ class TinyStoriesDataLoader:
             add_eos=self.cfg.add_eos,
             max_tokens=self.cfg.max_eval_tokens,
         )
+        print(f"build_token_stream() called for eval -> {len(eval_tokens)} tokens")
 
         train_ds = TokenStreamDataset(train_tokens, seq_len=self.cfg.seq_len, stride=self.cfg.stride)
+        print(f"TokenStreamDataset() created for train -> {len(train_ds)} samples")
         eval_ds = TokenStreamDataset(eval_tokens, seq_len=self.cfg.seq_len, stride=self.cfg.stride)
+        print(f"TokenStreamDataset() created for eval -> {len(eval_ds)} samples")
 
         batch_size = int(self.cfg.batch_size)
+        print(f"int(self.cfg.batch_size) -> {batch_size}")
         drop_last_train = len(train_ds) >= batch_size
+        print(f"len(train_ds) >= batch_size -> {drop_last_train}")
         train_loader = DataLoader(
             train_ds,
             batch_size=batch_size,
@@ -294,6 +313,7 @@ class TinyStoriesDataLoader:
             num_workers=int(self.cfg.num_workers),
             drop_last=drop_last_train,
         )
+        print(f"DataLoader() created for train")
         eval_loader = DataLoader(
             eval_ds,
             batch_size=batch_size,
@@ -301,6 +321,9 @@ class TinyStoriesDataLoader:
             num_workers=int(self.cfg.num_workers),
             drop_last=False,
         )
+        print(f"DataLoader() created for eval")
+        print(f"train_loader size: {len(train_loader)} batches")
+        print(f"eval_loader size: {len(eval_loader)} batches")
         return train_loader, eval_loader
 
     def load_from_file(self, path: str | Path, *, text_field: str = "text") -> tuple[DataLoader, DataLoader]:

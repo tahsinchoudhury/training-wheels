@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from pathlib import Path
+import json
 
 import torch
 import torch.nn as nn
@@ -93,6 +95,49 @@ class Llama(nn.Module):
             )
         self.lm_head.weight = self.token_embeddings.weight
 
+    def save(self, path: str | Path) -> None:
+        """Save model weights and config to disk."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save config as JSON
+        config_data = {
+            "vocab_size": self.vocab_size,
+            "context_length": self.context_length,
+            "d_model": self.d_model,
+            "num_layers": self.num_layers,
+            "num_heads": self.num_heads,
+            "d_ff": self.d_ff,
+            "rope_theta": self.rope_theta,
+            "tie_weights": self.tie_weights,
+        }
+        config_path = path.parent / f"{path.stem}_config.json"
+        with open(config_path, "w") as f:
+            json.dump(config_data, f, indent=2)
+        
+        # Save model state dict
+        torch.save(self.state_dict(), path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "Llama":
+        """Load model weights and config from disk."""
+        path = Path(path)
+        
+        # Load config
+        config_path = path.parent / f"{path.stem}_config.json"
+        with open(config_path, "r") as f:
+            config_data = json.load(f)
+        
+        tie_weights = config_data.pop("tie_weights")
+        config = LlamaConfig(**config_data)
+        
+        # Create model and load weights
+        model = cls(config, tie_weights=tie_weights)
+        state_dict = torch.load(path, weights_only=True)
+        model.load_state_dict(state_dict)
+        
+        return model
+
     def _load_from_weights_dict(self, weights: dict[str, torch.Tensor]) -> None:
         required = [
             "token_embeddings.weight",
@@ -135,3 +180,39 @@ class Llama(nn.Module):
         x = self.ln_final(x)
         logits = self.lm_head(x)
         return logits
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids: torch.Tensor,
+        *,
+        device: torch.device,
+        max_new_tokens: int = 40000,
+        eos_id: int | None = None,
+    ) -> torch.Tensor:
+        self.eval()
+
+        full_ids = input_ids.tolist()[0]
+        context_len = self.context_length
+
+        for _ in range(int(max_new_tokens)):
+            # Ensure input_ids has the correct shape [batch_size, seq_len]
+            # and only contains the last `context_len` tokens.
+            current_input_ids = torch.tensor([full_ids[-context_len:]], dtype=torch.long, device=device)
+
+            logits = self.forward(current_input_ids)
+            next_id = int(logits[0, -1].argmax(dim=-1).item())
+            full_ids.append(next_id)
+
+            if eos_id is not None and next_id == int(eos_id):
+                print("EOS token generated, stopping generation.")
+                break
+
+        return torch.tensor([full_ids], dtype=torch.long, device=device)
+
+    @torch.no_grad()
+    def num_parameters(self) -> tuple[int, int]:
+        total_parameters = sum(p.numel() for p in self.parameters())
+        total_trainable_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+        return total_parameters, total_trainable_parameters

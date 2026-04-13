@@ -14,3 +14,7 @@ tutorial.md
 plots/
 .hf_cache/
 therapml/phase2/part1/checkpoints_lm/
+
+reports
+models/
+logs/

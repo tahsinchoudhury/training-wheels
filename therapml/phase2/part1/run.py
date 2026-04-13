@@ -10,6 +10,7 @@ from therapml.phase2.part1.data_loader import TinyStoriesDataLoader, TinyStories
 from therapml.phase2.part1.models.llama import Llama, LlamaConfig
 from therapml.phase2.part1.train import TrainConfig, Trainer
 from therapml.phase2.part1.tokenizer.bpe import BPETokenizer, BPETrainingConfig
+from therapml.phase2.part1.logger import TrainingLogger
 
 
 def _default_texts() -> list[str]:
@@ -28,47 +29,11 @@ def _default_texts() -> list[str]:
     ]
 
 
-@torch.no_grad()
-def generate(
-    model: torch.nn.Module,
-    tokenizer: BPETokenizer,
-    prompt: str,
-    *,
-    device: torch.device,
-    max_new_tokens: int = 40,
-    eos_token: str = "<eos>",
-    return_prompt: bool = True,
-) -> str:
-    model.eval()
-
-    eos_id = tokenizer.token_to_id(eos_token)
-    full_ids = list(map(int, tokenizer.encode(prompt)))
-    context_len = int(getattr(model, "context_length", len(full_ids)))
-    input_ids = torch.tensor([full_ids[-context_len:]], dtype=torch.long, device=device)
-
-    for _ in range(int(max_new_tokens)):
-        logits = model(input_ids)
-        next_id = int(logits[0, -1].argmax(dim=-1).item())
-        full_ids.append(next_id)
-
-        if eos_id is not None and next_id == int(eos_id):
-            break
-
-        # Feed only the last `context_len` tokens into the model, but keep `full_ids` for decoding.
-        input_ids = torch.tensor([full_ids[-context_len:]], dtype=torch.long, device=device)
-
-    if return_prompt:
-        return tokenizer.decode(full_ids)
-
-    prompt_len = len(tokenizer.encode(prompt))
-    return tokenizer.decode(full_ids[prompt_len:])
-
-
-def _load_or_train_tokenizer(tokenizer_path: Path) -> BPETokenizer:
+def _load_or_train_tokenizer(tokenizer_path: Path, logger) -> BPETokenizer:
     if tokenizer_path.exists():
         return BPETokenizer.load(tokenizer_path)
 
-    print(f"Tokenizer not found at {tokenizer_path}; training a tiny tokenizer from built-in sample texts.")
+    logger.info(f"Tokenizer not found at {tokenizer_path}; training a tiny tokenizer from built-in sample texts.")
     config = BPETrainingConfig(vocab_size=2000, min_frequency=1)
     tokenizer = BPETokenizer.train_from_iterator(_default_texts(), config=config)
     tokenizer.save(tokenizer_path)
@@ -80,6 +45,7 @@ def _load_tinystories_from_hf(
     text_field: str,
     max_train_texts: int,
     max_eval_texts: int,
+    logger,
     seed=42,
 ) -> tuple[list[str], list[str]]:
     ds = load_dataset("roneneldan/TinyStories")
@@ -94,15 +60,34 @@ def _load_tinystories_from_hf(
         raise KeyError(
             f"Missing field {text_field!r} in validation split. Available columns: {eval_ds.column_names}"
         )
+    
+    logger.info(f"Loaded dataset with {len(train_ds)} train texts and {len(eval_ds)} validation texts.")
 
-    train_take = min(int(max_train_texts), int(len(train_ds)))
-    eval_take = min(int(max_eval_texts), int(len(eval_ds)))
-    train_texts = [str(t) for t in train_ds.select(range(train_take))[text_field] if str(t).strip()]
-    eval_texts = [str(t) for t in eval_ds.select(range(eval_take))[text_field] if str(t).strip()]
+    train_take = min(max_train_texts, len(train_ds))
+    eval_take = min(max_eval_texts, len(eval_ds))
+    
+    # train_texts = [str(t) for t in train_ds.select(range(train_take))[text_field] if str(t).strip()]
+    # eval_texts = [str(t) for t in eval_ds.select(range(eval_take))[text_field] if str(t).strip()]
+
+    train_texts = [
+        str(x[text_field]).strip()
+        for x in train_ds.take(train_take)
+        if x[text_field] and str(x[text_field]).strip()
+    ]
+
+    eval_texts = [
+        str(x[text_field]).strip()
+        for x in eval_ds.take(eval_take)
+        if x[text_field] and str(x[text_field]).strip()
+    ]
+
+    logger.info(f"Using {len(train_texts)} train texts and {len(eval_texts)} validation texts after filtering empty/whitespace-only entries.")    
+    
     return train_texts, eval_texts
 
 
 def main() -> int:
+    logger = TrainingLogger.get_logger(__name__)
     parser = argparse.ArgumentParser(description="TinyStories LM runner (train/eval + quick inference).")
     parser.add_argument("--tokenizer", default="data/tinystories_bpe.json", help="Path to tokenizer JSON.")
     parser.add_argument(
@@ -117,12 +102,17 @@ def main() -> int:
 
     parser.add_argument("--seq-len", type=int, default=64)
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--stride", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--max-lr", type=float, default=3e-4)
     parser.add_argument("--min-lr", type=float, default=3e-5)
     parser.add_argument("--warmup-steps", type=int, default=50)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--grad-clip", type=float, default=1.0)
+    parser.add_argument("--generation-step-interval", type=int, default=500)
+    parser.add_argument("--plot-interval-steps", type=int, default=5000, help="Plot losses every N steps (0 to disable).")
+    parser.add_argument("--checkpoint-interval-epochs", type=int, default=0, help="Save checkpoint every N epochs (0 to disable).")
+    parser.add_argument("--checkpoint-dir", default="models/checkpoints", help="Directory to save model checkpoints.")
 
     parser.add_argument("--d-model", type=int, default=128)
     parser.add_argument("--num-layers", type=int, default=2)
@@ -136,15 +126,18 @@ def main() -> int:
     parser.add_argument("--max-eval-tokens", type=int, default=2000)
 
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--load-model", default=None, help="Path to a pre-trained model checkpoint to load (optional).")
+    parser.add_argument("--save-model", default="models/llama_phase2_part1.pth", help="Path where to save the trained model.")
     args = parser.parse_args()
 
     tokenizer_path = Path(args.tokenizer)
-    tokenizer = _load_or_train_tokenizer(tokenizer_path)
-    print(f"Loaded tokenizer vocab_size={tokenizer.vocab_size} from {tokenizer_path}")
+    tokenizer = _load_or_train_tokenizer(tokenizer_path, logger)
+    logger.info(f"Loaded tokenizer vocab_size={tokenizer.vocab_size} from {tokenizer_path}")
 
     loader_cfg = TinyStoriesLoaderConfig(
         seq_len=int(args.seq_len),
         batch_size=int(args.batch_size),
+        stride=int(args.stride),
         train_split=0.95,
         max_train_texts=int(args.max_train_texts),
         max_eval_texts=int(args.max_eval_texts),
@@ -155,22 +148,23 @@ def main() -> int:
 
     if args.dataset:
         train_loader, eval_loader = data_loader.load_from_file(args.dataset, text_field=args.text_field)
-        print(f"Loaded dataset from {args.dataset}")
+        logger.info(f"Loaded dataset from {args.dataset}")
     else:
         try:
             train_texts, eval_texts = _load_tinystories_from_hf(
                 text_field=args.text_field,
                 max_train_texts=int(args.max_train_texts),
                 max_eval_texts=int(args.max_eval_texts),
+                logger=logger,
             )
             train_loader, eval_loader = data_loader.load_from_train_eval_texts(train_texts, eval_texts)
-            print(
+            logger.info(
                 "Loaded HuggingFace dataset roneneldan/TinyStories "
                 f"(train={len(train_texts)} texts, validation={len(eval_texts)} texts)."
             )
         except Exception as e:
-            print(f"Failed to load HuggingFace dataset roneneldan/TinyStories ({type(e).__name__}: {e}).")
-            print("Falling back to built-in tiny corpus.")
+            logger.error(f"Failed to load HuggingFace dataset roneneldan/TinyStories ({type(e).__name__}: {e}).")
+            logger.info("Falling back to built-in tiny corpus.")
             train_loader, eval_loader = data_loader.load_from_texts(_default_texts())
 
     if len(train_loader) == 0 or len(eval_loader) == 0:
@@ -179,19 +173,31 @@ def main() -> int:
             "or increasing --max-*-tokens."
         )
 
-    model_cfg = LlamaConfig(
-        vocab_size=int(tokenizer.vocab_size),
-        context_length=int(args.seq_len),
-        d_model=int(args.d_model),
-        num_layers=int(args.num_layers),
-        num_heads=int(args.num_heads),
-        d_ff=int(args.d_ff),
-        rope_theta=float(args.rope_theta),
-    )
-    model = Llama(model_cfg)
+    logger.debug(f"Before training, memory allocated: {torch.cuda.memory_allocated(args.device) / 1e6:.2f}MB, reserved: {torch.cuda.memory_reserved(args.device) / 1e6:.2f}MB")
+
+    # Load or create model
+    if args.load_model:
+        logger.info(f"Loading pre-trained model from {args.load_model}")
+        model = Llama.load(args.load_model)
+    else:
+        model_cfg = LlamaConfig(
+            vocab_size=int(tokenizer.vocab_size),
+            context_length=int(args.seq_len),
+            d_model=int(args.d_model),
+            num_layers=int(args.num_layers),
+            num_heads=int(args.num_heads),
+            d_ff=int(args.d_ff),
+            rope_theta=float(args.rope_theta),
+        )
+        model = Llama(model_cfg)
+    
+    total_params, trainable_params = model.num_parameters()
+    logger.info(f"Initialized Llama model with {total_params / 1e6:.2f}M total parameters, {trainable_params / 1e6:.2f}M trainable parameters.")
 
     device = torch.device(args.device)
     model.to(device)
+
+    logger.debug(f"After initializing the model, memory allocated: {torch.cuda.memory_allocated(args.device) / 1e6:.2f}MB, reserved: {torch.cuda.memory_reserved(args.device) / 1e6:.2f}MB")
 
     train_cfg = TrainConfig(
         num_epochs=int(args.epochs),
@@ -200,6 +206,10 @@ def main() -> int:
         warmup_steps=int(args.warmup_steps),
         weight_decay=float(args.weight_decay),
         grad_clip=float(args.grad_clip),
+        generation_step_interval=int(args.generation_step_interval),
+        plot_interval_steps=int(args.plot_interval_steps),
+        checkpoint_interval_epochs=int(args.checkpoint_interval_epochs),
+        checkpoint_dir=str(args.checkpoint_dir),
         device=str(args.device),
     )
 
@@ -212,18 +222,39 @@ def main() -> int:
         train_cfg=train_cfg,
         train_loader=train_loader,
         eval_loader=eval_loader,
+        tokenizer=tokenizer,
     )
-    print("history:", history)
+    logger.info(f"Training complete. History: {history}")
 
-    print("\nInference samples:")
+    # Save the trained model
+    logger.info(f"Saving trained model to {args.save_model}")
+    model.save(args.save_model)
+    logger.info(f"Model saved successfully to {args.save_model}")
+
+    # Load the model in a new object to test save/load functionality
+    logger.info(f"Testing save/load by loading model from {args.save_model}")
+    trained_model = Llama.load(args.save_model)
+    trained_model.to(device)
+    logger.info("Model successfully loaded and moved to device")
+
+    logger.info("Inference samples:")
     prompts = [
         "Once upon a time",
         "Mia saw",
         "A small dragon",
+        "It has been an absolute",
     ]
+    eos_id = tokenizer.token_to_id("<eos>")
     for p in prompts:
-        out = generate(model, tokenizer, p, device=device, max_new_tokens=40)
-        print(f"\nPrompt: {p!r}\nOutput:  {out!r}")
+        input_ids = torch.tensor([tokenizer.encode(p)], dtype=torch.long, device=device)
+        generated_ids = trained_model.generate(
+            input_ids,
+            device=device,
+            max_new_tokens=40,
+            eos_id=eos_id,
+        )
+        out = tokenizer.decode(generated_ids[0].tolist())
+        logger.info(f"Prompt: {p!r}\nOutput:  {out!r}")
 
     return 0
 

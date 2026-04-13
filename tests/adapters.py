@@ -82,6 +82,7 @@ def run_cross_entropy_loss(
     logits: Float[Tensor, "batch output_dim"], ground_truth: Float[Tensor, "batch output_dim"]
 ) -> Float[Tensor, ""]:
     # raise NotImplementedError
+    print("ground truth shape:", ground_truth.shape)
     loss_fn = loss.CrossEntropyLoss()
     return loss_fn(logits, ground_truth)
 
