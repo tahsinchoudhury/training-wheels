@@ -119,7 +119,11 @@ class Llama(nn.Module):
         torch.save(self.state_dict(), path)
 
     @classmethod
-    def load(cls, path: str | Path) -> "Llama":
+    def load(
+        cls,
+        path: str | Path,
+        map_location: str | torch.device | None = None,
+    ) -> "Llama":
         """Load model weights and config from disk."""
         path = Path(path)
         
@@ -133,7 +137,7 @@ class Llama(nn.Module):
         
         # Create model and load weights
         model = cls(config, tie_weights=tie_weights)
-        state_dict = torch.load(path, weights_only=True)
+        state_dict = torch.load(path, map_location=map_location, weights_only=True)
         model.load_state_dict(state_dict)
         
         return model
@@ -192,23 +196,31 @@ class Llama(nn.Module):
     ) -> torch.Tensor:
         self.eval()
 
-        full_ids = input_ids.tolist()[0]
+        if input_ids.ndim != 2:
+            raise ValueError(f"Expected input_ids to have shape [batch, seq_len], got {tuple(input_ids.shape)}")
+
+        full_ids = input_ids.to(device=device, dtype=torch.long)
         context_len = self.context_length
+        finished = None if eos_id is None else torch.zeros(full_ids.shape[0], dtype=torch.bool, device=device)
 
         for _ in range(int(max_new_tokens)):
-            # Ensure input_ids has the correct shape [batch_size, seq_len]
-            # and only contains the last `context_len` tokens.
-            current_input_ids = torch.tensor([full_ids[-context_len:]], dtype=torch.long, device=device)
+            current_input_ids = full_ids[:, -context_len:]
 
             logits = self.forward(current_input_ids)
-            next_id = int(logits[0, -1].argmax(dim=-1).item())
-            full_ids.append(next_id)
+            next_ids = logits[:, -1, :].argmax(dim=-1)
 
-            if eos_id is not None and next_id == int(eos_id):
-                print("EOS token generated, stopping generation.")
-                break
+            if finished is not None:
+                next_ids = torch.where(finished, torch.full_like(next_ids, int(eos_id)), next_ids)
 
-        return torch.tensor([full_ids], dtype=torch.long, device=device)
+            full_ids = torch.cat((full_ids, next_ids.unsqueeze(1)), dim=1)
+
+            if finished is not None:
+                finished = finished | (next_ids == int(eos_id))
+                if finished.all():
+                    print("EOS token generated for all sequences, stopping generation.")
+                    break
+
+        return full_ids
 
     @torch.no_grad()
     def num_parameters(self) -> tuple[int, int]:
