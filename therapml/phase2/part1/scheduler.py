@@ -39,7 +39,7 @@ class WarmupCosineScheduler:
         
         decay_steps = self.total_steps - self.warmup_steps
         decay_steps_taken = step - self.warmup_steps
-        cosine_coeff = 0.5 * (1.0 + math.cos(math.pi * decay_steps_taken))
+        cosine_coeff = 0.5 * (1.0 + math.cos(math.pi * decay_steps_taken / decay_steps))
 
         return self.min_lr + (self.max_lr - self.min_lr) * cosine_coeff
     

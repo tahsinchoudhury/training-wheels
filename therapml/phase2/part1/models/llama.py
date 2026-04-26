@@ -95,6 +95,16 @@ class Llama(nn.Module):
             )
         self.lm_head.weight = self.token_embeddings.weight
 
+    def set_context_length(self, context_length: int) -> None:
+        """Update the maximum context length for RoPE-based attention."""
+        context_length = int(context_length)
+        if context_length <= 0:
+            raise ValueError("context_length must be > 0")
+
+        self.context_length = context_length
+        for block in self.layers:
+            block.ctx_len = context_length
+
     def save(self, path: str | Path) -> None:
         """Save model weights and config to disk."""
         path = Path(path)
